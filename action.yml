@@ -1,0 +1,39 @@
+name: "n8n Workflow Linter"
+description: "Lint n8n workflow JSON exports for leaked credentials, secrets, reliability gaps, and hygiene issues."
+branding:
+  icon: "check-circle"
+  color: "purple"
+
+inputs:
+  path:
+    description: "File or directory to lint."
+    required: false
+    default: "."
+  strict:
+    description: "Fail the job on warnings as well as errors."
+    required: false
+    default: "false"
+  config:
+    description: "Path to a .n8nlintrc.json config file."
+    required: false
+    default: ""
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Install n8n-workflow-linter
+      shell: bash
+      run: pip install "${{ github.action_path }}"
+
+    - name: Run n8n-lint
+      shell: bash
+      run: |
+        args=("${{ inputs.path }}" --format github)
+        if [ "${{ inputs.strict }}" = "true" ]; then args+=(--strict); fi
+        if [ -n "${{ inputs.config }}" ]; then args+=(--config "${{ inputs.config }}"); fi
+        n8n-lint "${args[@]}"

@@ -1,0 +1,8 @@
+- id: n8n-lint
+  name: n8n workflow linter
+  description: Lint n8n workflow JSON exports for leaks and reliability gaps.
+  entry: n8n-lint
+  language: python
+  files: \.json$
+  # Consumers usually want their own paths/flags; pass them via `args:` in
+  # .pre-commit-config.yaml. pre-commit appends the changed filenames.

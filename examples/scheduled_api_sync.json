@@ -1,0 +1,43 @@
+{
+  "name": "Clean Example",
+  "nodes": [
+    {
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [0, 0],
+      "parameters": {}
+    },
+    {
+      "name": "Fetch Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [200, 0],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "parameters": { "url": "https://api.example.com/data" },
+      "credentials": {
+        "httpHeaderAuth": { "id": "REPLACE_WITH_CREDENTIAL_ID", "name": "API" }
+      }
+    },
+    {
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [0, 200],
+      "parameters": {}
+    },
+    {
+      "name": "Notify Ops",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2,
+      "position": [200, 200],
+      "parameters": {},
+      "credentials": { "slackApi": { "id": "REPLACE_WITH_CREDENTIAL_ID", "name": "Slack" } }
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": { "main": [[{ "node": "Fetch Data", "type": "main", "index": 0 }]] },
+    "Error Trigger": { "main": [[{ "node": "Notify Ops", "type": "main", "index": 0 }]] }
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "rules": {
+    "disabled-node": "off",
+    "hardcoded-resource-id": "error",
+    "missing-retry": "warning"
+  }
+}

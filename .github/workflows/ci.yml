@@ -1,0 +1,48 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Test on Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.11", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install
+        run: pip install -e ".[dev]"
+
+      - name: Run tests
+        run: python -m pytest -q
+
+      - name: Smoke-test the CLI
+        run: |
+          n8n-lint --version
+          n8n-lint --list-rules
+          # The clean example must pass even under --strict.
+          n8n-lint examples --strict
+
+  dogfood:
+    name: Lint this repo's own fixtures via the action
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Prove the composite action installs and runs. The clean example must be
+      # clean; we don't lint the intentionally-bad fixtures here.
+      - uses: ./
+        with:
+          path: examples
+          strict: "true"
