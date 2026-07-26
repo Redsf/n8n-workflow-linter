@@ -30,14 +30,12 @@ library, so it works in any CI job that has `python` and nothing else.
 ## Install
 
 ```bash
-pip install n8n-workflow-linter
+pip install git+https://github.com/Redsf/n8n-workflow-linter
 ```
 
-Or run the latest without installing:
-
-```bash
-pipx run n8n-workflow-linter workflows/
-```
+> Not on PyPI yet, so install from git. The package builds a normal wheel
+> (`python -m build`) if you'd rather vendor it. The GitHub Action below needs
+> no install at all.
 
 ## Quickstart
 
@@ -112,7 +110,7 @@ repos:
 It's a normal CLI with a meaningful exit code:
 
 ```bash
-pip install n8n-workflow-linter
+pip install git+https://github.com/Redsf/n8n-workflow-linter
 n8n-lint workflows/ --strict
 ```
 
