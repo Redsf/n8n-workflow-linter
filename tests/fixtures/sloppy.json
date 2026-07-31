@@ -1,0 +1,50 @@
+{
+  "name": "Sloppy but not leaky fixture",
+  "nodes": [
+    {
+      "parameters": {},
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [0, 0]
+    },
+    {
+      "parameters": { "url": "https://api.example.com/a", "options": {} },
+      "name": "HTTP Request",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "retryOnFail": true,
+      "onError": "continueRegularOutput",
+      "position": [200, 0]
+    },
+    {
+      "parameters": { "url": "https://api.example.com/b", "options": {} },
+      "name": "HTTP Request1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "retryOnFail": true,
+      "continueOnFail": true,
+      "position": [400, 0]
+    },
+    {
+      "parameters": { "jsCode": "return items;" },
+      "name": "Code2",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [600, 0]
+    },
+    {
+      "parameters": {},
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [0, 200]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": { "main": [[{ "node": "HTTP Request", "type": "main", "index": 0 }]] },
+    "HTTP Request": { "main": [[{ "node": "HTTP Request1", "type": "main", "index": 0 }]] },
+    "HTTP Request1": { "main": [[{ "node": "Code2", "type": "main", "index": 0 }]] },
+    "Error Trigger": { "main": [[]] }
+  }
+}

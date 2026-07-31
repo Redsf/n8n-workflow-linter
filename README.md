@@ -103,17 +103,44 @@ the JSON. Exit codes are unchanged, so it is safe in scripts.
 |---|---|---|
 | `real-credential-id` | **error** | A credential referencing an ID from a real n8n instance instead of a placeholder. These leak which credential a private instance used and break import for anyone else — credential IDs don't transfer between accounts. |
 | `hardcoded-secret` | **error** | A live API key, token, or private key embedded anywhere in the file (OpenAI, Anthropic, AWS, Google, Slack, Stripe, Twilio, GitHub, JWTs, PEM blocks). Documented placeholders are ignored. |
+| `embedded-secret` | **error** | A credential-shaped value assigned inside a **Code** node or a header/query parameter. Where `hardcoded-secret` asks "does this look like an OpenAI key?", this asks "is a high-entropy value sitting in a field called `token`?" — so it catches internal and customer keys that match no known vendor format. |
+| `credential-in-url` | **error** | An API key or token passed in a URL query string. Beyond sitting in the file, URLs get logged by the target service, by proxies, and by error trackers — into logs you cannot clean. |
 | `hardcoded-resource-id` | warning | A hardcoded Google Drive/Sheets file ID or Gmail label ID baked into a node. Leaks which resource a real deployment used and breaks reuse. |
 | `no-error-trigger` | warning | No active **Error Trigger** node — a workflow failure will alert nobody. |
 | `missing-retry` | warning | An **HTTP Request** to an external service with `retryOnFail` off — a transient network error fails the whole run. |
+| `missing-timeout` | warning | An **HTTP Request** with no timeout. n8n falls back to 5 minutes, so one hanging endpoint stalls the run — per item, inside a loop. |
+| `error-output-swallowed` | warning | A node set to continue on the *normal* output when it fails, passing empty data downstream while the run still reports success. `continueErrorOutput` — a real error branch — is correctly ignored. |
 | `orphan-node` | warning | A node connected to nothing on the canvas. It will never run, and usually means a wire got deleted. |
 | `pinned-data` | warning | Pinned test data left in the export. It bloats the file and frequently contains real customer records. |
 | `unauthenticated-webhook` | warning | A **Webhook** trigger with no authentication — anyone with the URL can fire it. |
+| `default-node-names` | info | Three or more nodes still called `HTTP Request1`, `Code2`, `Edit Fields3`. Unreadable later, and it makes every error message useless. |
 | `disabled-node` | info | A disabled node left on the canvas. |
 
 Every default is calibrated against real workflows to keep false positives near
-zero. `real-credential-id` and `hardcoded-secret` are errors because they should
-block a merge; the rest are advisory unless you opt into `--strict`.
+zero — see [Calibration](#calibration) for the measured rates. The five error
+rules block a merge; the rest are advisory unless you opt into `--strict`.
+
+## Calibration
+
+A linter that cries wolf gets disabled, and then it protects nothing. Every rule
+is measured against a corpus of 59 real published workflows before it ships:
+
+| Rule | Files it fires on |
+|---|---|
+| `embedded-secret` | 0% |
+| `credential-in-url` | 0% |
+| `error-output-swallowed` | 15% |
+| `default-node-names` | 20% |
+| `missing-timeout` | 42% |
+
+The bar for accepting a rule:
+
+- An **error** rule firing on more than 5% of the corpus has every hit inspected
+  by hand before release. Errors block merges, so they have to be right.
+- A **warning** firing on more than two thirds of the corpus is an opinion, not a
+  defect. It gets downgraded to info or cut.
+- Rules are measured in isolation, one at a time, so a noisy rule cannot hide
+  behind a quiet one.
 
 ## Use it in CI
 

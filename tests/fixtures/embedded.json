@@ -1,0 +1,62 @@
+{
+  "name": "Embedded secrets fixture",
+  "nodes": [
+    {
+      "parameters": {},
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const apiKey = \"7f3Ka92mFhs82nXqL4vZ\";\nconst safeToken = \"REPLACE_WITH_TOKEN\";\nconst greeting = \"hello there my friend\";\nreturn [{json: {apiKey}}];"
+      },
+      "name": "Build Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [200, 0]
+    },
+    {
+      "parameters": {
+        "url": "https://api.example.com/v1/items?api_key=9Kd82mVn4Xq7Lp3w&limit=50",
+        "options": { "timeout": 10000 },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-api-key", "value": "Qm4Vx82nKd93Lp7wZr51" }
+          ]
+        }
+      },
+      "name": "Fetch Items",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "retryOnFail": true,
+      "position": [400, 0]
+    },
+    {
+      "parameters": {
+        "url": "https://api.example.com/v1/safe?api_key={{ $credentials.apiKey }}",
+        "options": { "timeout": 5000 }
+      },
+      "name": "Fetch Safely",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "retryOnFail": true,
+      "position": [600, 0]
+    },
+    {
+      "parameters": {},
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [0, 200]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": { "main": [[{ "node": "Build Request", "type": "main", "index": 0 }]] },
+    "Build Request": { "main": [[{ "node": "Fetch Items", "type": "main", "index": 0 }]] },
+    "Fetch Items": { "main": [[{ "node": "Fetch Safely", "type": "main", "index": 0 }]] },
+    "Error Trigger": { "main": [[]] }
+  }
+}

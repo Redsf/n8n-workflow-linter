@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import math
+from collections import Counter
 
 
 def line_of_offset(text: str, offset: int) -> int:
@@ -33,3 +35,20 @@ def redact(secret: str) -> str:
     if len(secret) <= 12:
         return "…"
     return f"{secret[:6]}…{secret[-4:]}"
+
+
+def shannon_entropy(value: str) -> float:
+    """Bits of entropy per character.
+
+    Used to separate a real credential from a placeholder that happens to sit in
+    a field called `token`. A random key runs about 4-5 bits/char; a repeated
+    filler string like "xxxxxxxxxxxxxxxx" is 0; ordinary prose is around 3-4 but
+    is filtered out earlier by requiring no whitespace.
+    """
+    if not value:
+        return 0.0
+    length = len(value)
+    return -sum(
+        (count / length) * math.log2(count / length)
+        for count in Counter(value).values()
+    )

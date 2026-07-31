@@ -83,6 +83,93 @@ class MissingRetry(Rule):
                 )
 
 
+class ErrorOutputSwallowed(Rule):
+    id = "error-output-swallowed"
+    default_severity = Severity.WARNING
+    summary = "A node continues on failure without an error branch, passing empty data downstream."
+
+    # `continueErrorOutput` is the good setting — it routes failures to a second
+    # output the author has to wire somewhere. Only the silent variants are flagged.
+    SILENT_MODES = ("continueRegularOutput",)
+
+    plain_title = "When this step fails, the workflow carries on as if it worked"
+    plain_meaning = (
+        "This step is set to keep going when it fails. n8n then passes empty or "
+        "partial data to whatever comes next, and the run finishes with a green "
+        "tick. So the workflow reports success while doing the wrong thing — "
+        "writing blank rows, emailing empty summaries, marking records processed "
+        "that were never processed. A loud failure is easy to fix. A quiet one is "
+        "found weeks later by a client."
+    )
+    plain_fix = (
+        "Open the step in n8n, go to the Settings tab, and look at 'On Error'.\n"
+        "Best option: 'Continue (using error output)'. That gives the node a "
+        "second output you connect to something that handles the failure — a "
+        "Slack alert, a row in a 'failed' sheet, a retry path.\n"
+        "Also fine: 'Stop Workflow'. The run fails loudly and your Error Trigger "
+        "tells you.\n"
+        "The one to avoid is the current setting, which continues on the normal "
+        "output as though nothing went wrong."
+    )
+
+    def check(self, workflow: Workflow) -> Iterable[RuleHit]:
+        for node in workflow.nodes:
+            if node.disabled:
+                continue
+            on_error = node.raw.get("onError")
+            legacy = node.raw.get("continueOnFail")
+            if on_error in self.SILENT_MODES or (on_error is None and legacy is True):
+                yield RuleHit(
+                    message=(
+                        "node continues on the normal output when it fails — "
+                        "downstream steps receive empty data and the run still "
+                        "reports success"
+                    ),
+                    node_name=node.name,
+                    line=node.line,
+                )
+
+
+class MissingTimeout(Rule):
+    id = "missing-timeout"
+    default_severity = Severity.WARNING
+    summary = "An HTTP Request has no timeout, so a hanging endpoint stalls the run."
+
+    plain_title = "If the other service hangs, this step waits five minutes"
+    plain_meaning = (
+        "No timeout is set on this request, so n8n falls back to its default of "
+        "five minutes. If the service you are calling stops responding rather "
+        "than refusing outright — which is what an overloaded API usually does — "
+        "your workflow sits there doing nothing for five minutes per item. On a "
+        "loop over a hundred records that is most of a day, and every one of "
+        "those minutes is billed if you are on a paid n8n plan."
+    )
+    plain_fix = (
+        "1. Double-click the HTTP Request step in n8n.\n"
+        "2. Scroll to 'Options' and click 'Add Option' -> 'Timeout'.\n"
+        "3. Set something sensible for the service — 10000 (10 seconds) is a "
+        "reasonable default for a normal API, longer only if you know it is slow.\n"
+        "Pair this with 'Retry On Fail' so a timeout gets retried rather than "
+        "just failing faster."
+    )
+
+    def check(self, workflow: Workflow) -> Iterable[RuleHit]:
+        for node in workflow.nodes:
+            if node.disabled or not node.type_is("httpRequest"):
+                continue
+            options = node.parameters.get("options")
+            timeout = options.get("timeout") if isinstance(options, dict) else None
+            if not timeout:
+                yield RuleHit(
+                    message=(
+                        "HTTP Request has no timeout set — a hanging endpoint "
+                        "blocks the run for n8n's 5-minute default"
+                    ),
+                    node_name=node.name,
+                    line=node.line,
+                )
+
+
 class OrphanNode(Rule):
     id = "orphan-node"
     default_severity = Severity.WARNING

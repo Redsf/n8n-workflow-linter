@@ -8,6 +8,25 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Five new rules, taking the set from 9 to 14:
+  - `embedded-secret` (error) — entropy-based detection of credentials assigned
+    inside Code nodes or header/query parameters. Complements `hardcoded-secret`,
+    which only recognises known vendor key formats and therefore misses internal
+    and customer keys.
+  - `credential-in-url` (error) — an API key passed in a URL query string, where
+    it ends up in logs nobody can clean.
+  - `missing-timeout` (warning) — an HTTP Request with no timeout, falling back
+    to n8n's 5-minute default.
+  - `error-output-swallowed` (warning) — a node continuing on its normal output
+    after a failure, so the run reports success while passing empty data on.
+    `continueErrorOutput` is correctly treated as the good setting.
+  - `default-node-names` (info) — three or more nodes still named `Code2`,
+    `HTTP Request1`.
+- `shannon_entropy` helper, used to separate real credentials from placeholders
+  sitting in credential-shaped fields.
+- A documented calibration bar in the README, with measured false-positive rates
+  for every new rule against a 59-workflow corpus.
+
 - `--format plain` (and its shorthand `--explain`): a non-technical report that
   leads with a share/do-not-share verdict, explains what each finding actually
   means, and gives the fix as steps to click in the n8n UI rather than edits to

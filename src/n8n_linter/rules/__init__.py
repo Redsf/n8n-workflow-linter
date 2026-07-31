@@ -9,20 +9,35 @@ from __future__ import annotations
 
 from .base import Rule
 from .credentials import RealCredentialId
+from .embedded import CredentialInUrl, EmbeddedSecret
 from .hardcoded_ids import HardcodedResourceId
-from .hygiene import DisabledNode, PinnedData, UnauthenticatedWebhook
-from .reliability import MissingRetry, NoErrorTrigger, OrphanNode
+from .hygiene import DefaultNodeNames, DisabledNode, PinnedData, UnauthenticatedWebhook
+from .reliability import (
+    ErrorOutputSwallowed,
+    MissingRetry,
+    MissingTimeout,
+    NoErrorTrigger,
+    OrphanNode,
+)
 from .secrets import HardcodedSecret
 
 ALL_RULES: tuple[Rule, ...] = (
+    # Leaks first — these are the ones that must not reach a public repo.
     RealCredentialId(),
     HardcodedSecret(),
+    EmbeddedSecret(),
+    CredentialInUrl(),
     HardcodedResourceId(),
+    # Then reliability.
     NoErrorTrigger(),
     MissingRetry(),
+    MissingTimeout(),
+    ErrorOutputSwallowed(),
     OrphanNode(),
+    # Then hygiene.
     PinnedData(),
     UnauthenticatedWebhook(),
+    DefaultNodeNames(),
     DisabledNode(),
 )
 

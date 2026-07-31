@@ -41,6 +41,7 @@ def test_disable_rule_suppresses_it(capsys):
         "--strict",
         "--disable", "no-error-trigger",
         "--disable", "missing-retry",
+        "--disable", "missing-timeout",
         "--disable", "orphan-node",
     ])
     assert code == EXIT_OK

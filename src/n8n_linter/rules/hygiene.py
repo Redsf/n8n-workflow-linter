@@ -2,12 +2,30 @@
 
 from __future__ import annotations
 
+import re
 from typing import Iterable
 
 from ..model import Workflow
 from ..report import RuleHit, Severity
 from ..text_utils import line_of_node
 from .base import Rule
+
+# The name n8n gives a node when you drop it on the canvas, with the numeric
+# suffix it adds for duplicates. Anchored, so a node deliberately called
+# "Code that cleans the CSV" is not caught.
+DEFAULT_NAME = re.compile(
+    r"""(?ix)^\s*(
+        HTTP\ Request | Webhook | Code | Function(\ Item)? | Set | Edit\ Fields |
+        If | Switch | Merge | Wait | NoOp | No\ Operation,\ do\ nothing |
+        Filter | Sort | Limit | Aggregate | Summarize | Item\ Lists |
+        Split\ In\ Batches | Loop\ Over\ Items | Split\ Out | Execute\ Workflow |
+        Date\ &\ Time | Crypto | HTML | XML | Compare\ Datasets | Respond\ to\ Webhook |
+        Basic\ LLM\ Chain | AI\ Agent | Edit\ Image | Convert\ to\ File | Extract\ from\ File
+    )\s*\d*\s*$"""
+)
+
+# One leftover default name is noise; several means nobody named anything.
+DEFAULT_NAME_THRESHOLD = 3
 
 
 class PinnedData(Rule):
@@ -78,6 +96,46 @@ class UnauthenticatedWebhook(Rule):
                     node_name=node.name,
                     line=node.line,
                 )
+
+
+class DefaultNodeNames(Rule):
+    id = "default-node-names"
+    default_severity = Severity.INFO
+    summary = "Several nodes still carry n8n's default names, making the canvas unreadable."
+
+    plain_title = "Several steps are still called things like 'HTTP Request1'"
+    plain_meaning = (
+        "n8n names a step after the node type until you rename it. A canvas full "
+        "of 'Code1', 'Edit Fields2', 'HTTP Request3' is readable while you are "
+        "building it and unreadable three months later — including to you. It "
+        "also makes every error message useless, because 'HTTP Request2 failed' "
+        "does not tell you what was being fetched."
+    )
+    plain_fix = (
+        "In n8n, double-click each step's name at the top of its panel and "
+        "describe what it does, not what it is: 'Fetch HN front page' rather than "
+        "'HTTP Request1', 'Drop leads without an email' rather than 'Filter'.\n"
+        "Takes a couple of minutes and pays for itself the first time something "
+        "breaks at 3am."
+    )
+
+    def check(self, workflow: Workflow) -> Iterable[RuleHit]:
+        defaults = [
+            node for node in workflow.nodes
+            if not node.type_is("stickyNote") and DEFAULT_NAME.match(node.name)
+        ]
+        if len(defaults) < DEFAULT_NAME_THRESHOLD:
+            return
+        for node in defaults:
+            yield RuleHit(
+                message=(
+                    f"node still has n8n's default name "
+                    f"({len(defaults)} nodes in this workflow do) — rename it to "
+                    f"describe what it does"
+                ),
+                node_name=node.name,
+                line=node.line,
+            )
 
 
 class DisabledNode(Rule):
