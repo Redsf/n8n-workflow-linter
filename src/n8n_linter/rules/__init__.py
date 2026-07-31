@@ -8,6 +8,7 @@ docs all read from this list.
 from __future__ import annotations
 
 from .base import Rule
+from .cost import ExpensiveModelHighFrequency, LlmCostUnbounded, PollingTriggerCost
 from .credentials import RealCredentialId
 from .embedded import CredentialInUrl, EmbeddedSecret
 from .hardcoded_ids import HardcodedResourceId
@@ -34,6 +35,10 @@ ALL_RULES: tuple[Rule, ...] = (
     MissingTimeout(),
     ErrorOutputSwallowed(),
     OrphanNode(),
+    # Then cost — what it spends, and what it could spend instead.
+    ExpensiveModelHighFrequency(),
+    LlmCostUnbounded(),
+    PollingTriggerCost(),
     # Then hygiene.
     PinnedData(),
     UnauthenticatedWebhook(),

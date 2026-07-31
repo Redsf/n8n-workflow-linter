@@ -168,3 +168,97 @@ def test_entropy_floor_separates_a_key_from_a_repeated_placeholder():
 
     assert shannon_entropy("xxxxxxxxxxxxxxxx") < 3.0
     assert shannon_entropy("7f3Ka92mFhs82nXqL4vZ") >= 3.0
+
+
+# --- Phase C cost rules --------------------------------------------------
+
+
+def test_expensive_model_flags_a_frontier_model_on_a_fast_schedule():
+    hits = findings_for("expensive.json", "expensive-model-high-frequency")
+    assert [h.node_name for h in hits] == ["Opus Model"]
+    assert "8,640" in hits[0].message
+
+
+def test_cost_estimate_states_its_assumptions():
+    detail = findings_for("expensive.json", "expensive-model-high-frequency")[0].detail
+    # An estimate that hides its inputs is the thing this rule exists to avoid.
+    assert "assumed - not measured" in detail
+    assert "runs/month" in detail
+    assert "Prices last verified" in detail
+
+
+def test_cost_estimate_offers_the_same_vendor_first():
+    detail = findings_for("expensive.json", "expensive-model-high-frequency")[0].detail
+    alternatives = detail.split("Cheaper models to evaluate against it:")[1]
+    # Opus 5 is Anthropic, so Sonnet 5 should lead: no new account or credential.
+    assert alternatives.strip().startswith("Claude Sonnet 5")
+
+
+def test_cost_estimate_refuses_to_promise_quality():
+    detail = findings_for("expensive.json", "expensive-model-high-frequency")[0].detail
+    assert "not something a" in detail and "linter can know" in detail
+    assert "agent-evals" in detail
+
+
+def test_third_party_prices_are_labelled_as_such():
+    detail = findings_for("expensive.json", "expensive-model-high-frequency")[0].detail
+    assert "[price from a third-party tracker]" in detail
+
+
+def test_llm_cost_unbounded_fires_when_no_max_tokens_is_set():
+    hits = findings_for("expensive.json", "llm-cost-unbounded")
+    assert [h.node_name for h in hits] == ["Opus Model"]
+
+
+def test_polling_trigger_cost_fires_once_not_per_node():
+    assert len(findings_for("expensive.json", "polling-trigger-cost")) == 1
+
+
+def test_cost_rules_stay_quiet_on_a_workflow_with_no_model():
+    for rule in ("expensive-model-high-frequency", "llm-cost-unbounded", "polling-trigger-cost"):
+        assert findings_for("clean.json", rule) == [], rule
+
+
+# --- pricing table -------------------------------------------------------
+
+
+def test_model_lookup_tolerates_n8n_id_shapes():
+    from n8n_linter import pricing
+
+    assert pricing.lookup("claude-opus-5").id == "claude-opus-5"
+    assert pricing.lookup("anthropic/claude-opus-5").id == "claude-opus-5"
+    assert pricing.lookup("claude-sonnet-5-20260514").id == "claude-sonnet-5"
+    assert pricing.lookup("GPT-4o-mini").id == "gpt-4o-mini"
+    assert pricing.lookup("some-model-nobody-has-heard-of") is None
+    assert pricing.lookup("") is None
+
+
+def test_alternatives_never_jump_more_than_one_capability_tier():
+    from n8n_linter import pricing
+
+    for model in pricing.CATALOG:
+        allowed = set(pricing.TIER_ORDER[pricing.TIER_ORDER.index(model.tier):][:2])
+        for alternative in pricing.cheaper_alternatives(model):
+            assert alternative.tier in allowed, f"{model.id} -> {alternative.id}"
+            assert alternative.output_price < model.output_price
+
+
+def test_pricing_table_declares_a_source_for_every_row():
+    from n8n_linter import pricing
+
+    for model in pricing.CATALOG:
+        assert model.source in (pricing.PRIMARY, pricing.AGGREGATE), model.id
+        assert model.input_price > 0 and model.output_price > 0, model.id
+
+
+def test_staleness_warning_appears_once_the_table_ages():
+    from datetime import timedelta
+
+    from n8n_linter import pricing
+
+    fresh = pricing.LAST_VERIFIED + timedelta(days=1)
+    stale = pricing.LAST_VERIFIED + timedelta(days=pricing.STALE_AFTER_DAYS + 1)
+    assert not pricing.is_stale(fresh)
+    assert pricing.is_stale(stale)
+    assert "out of date" in pricing.verification_note(stale)
+    assert "out of date" not in pricing.verification_note(fresh)

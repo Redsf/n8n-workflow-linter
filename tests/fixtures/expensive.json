@@ -1,0 +1,46 @@
+{
+  "name": "Expensive AI workflow fixture",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": { "interval": [{ "field": "minutes", "minutesInterval": 5 }] }
+      },
+      "name": "Every 5 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": { "promptType": "define", "text": "Summarise the input." },
+      "name": "Summarise Ticket",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.5,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "model": "claude-opus-5",
+        "options": {}
+      },
+      "name": "Opus Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.2,
+      "position": [220, 200],
+      "credentials": {
+        "anthropicApi": { "id": "REPLACE_WITH_CREDENTIAL_ID", "name": "Anthropic" }
+      }
+    },
+    {
+      "parameters": {},
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [0, 400]
+    }
+  ],
+  "connections": {
+    "Every 5 Minutes": { "main": [[{ "node": "Summarise Ticket", "type": "main", "index": 0 }]] },
+    "Opus Model": { "ai_languageModel": [[{ "node": "Summarise Ticket", "type": "ai_languageModel", "index": 0 }]] },
+    "Error Trigger": { "main": [[]] }
+  }
+}

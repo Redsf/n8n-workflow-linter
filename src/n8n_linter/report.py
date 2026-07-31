@@ -33,6 +33,10 @@ class Finding:
     path: str
     line: int | None = None
     node_name: str | None = None
+    detail: str = ""
+    """Multi-line context computed per finding — a cost estimate and its
+    assumptions, say. Only the plain formatter renders it; the one-line formats
+    stay one line."""
 
 
 @dataclass(frozen=True)
@@ -42,6 +46,7 @@ class RuleHit:
     message: str
     node_name: str | None = None
     line: int | None = None
+    detail: str = ""
 
 
 # ANSI colors, applied only when writing to a TTY.

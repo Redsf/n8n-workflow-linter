@@ -153,6 +153,13 @@ def format_plain(findings: list[Finding], summary: dict, files_checked: int) -> 
                 lines.append("")
                 lines.extend(_affected(hits))
                 lines.append("")
+                # Per-finding computed context (cost estimates and their
+                # assumptions). Pre-formatted, so it is indented, not re-wrapped.
+                for hit in hits:
+                    if not hit.detail:
+                        continue
+                    lines.extend(f"    {row}".rstrip() for row in hit.detail.split("\n"))
+                    lines.append("")
                 lines.append("  What this means")
                 lines.extend(_wrap(meaning, indent="    "))
                 lines.append("")

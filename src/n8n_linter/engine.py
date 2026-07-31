@@ -30,6 +30,7 @@ def lint_workflow(workflow: Workflow, config: Config) -> list[Finding]:
                     path=workflow.path,
                     line=hit.line,
                     node_name=hit.node_name,
+                    detail=hit.detail,
                 )
             )
     return findings

@@ -113,8 +113,27 @@ the JSON. Exit codes are unchanged, so it is safe in scripts.
 | `orphan-node` | warning | A node connected to nothing on the canvas. It will never run, and usually means a wire got deleted. |
 | `pinned-data` | warning | Pinned test data left in the export. It bloats the file and frequently contains real customer records. |
 | `unauthenticated-webhook` | warning | A **Webhook** trigger with no authentication — anyone with the URL can fire it. |
+| `expensive-model-high-frequency` | warning | A frontier-tier model on a schedule firing more than hourly. Reports an estimated monthly cost, names cheaper models with the saving for each, and states every assumption it made. |
+| `polling-trigger-cost` | warning | A schedule firing more often than every 5 minutes — most runs find nothing changed, and a webhook would be both cheaper and faster. |
 | `default-node-names` | info | Three or more nodes still called `HTTP Request1`, `Code2`, `Edit Fields3`. Unreadable later, and it makes every error message useless. |
+| `llm-cost-unbounded` | info | An LLM node with no `maxTokens`, so one unusually long reply has no cost ceiling. Info rather than warning — see [Calibration](#calibration). |
 | `disabled-node` | info | A disabled node left on the canvas. |
+
+### What the cost rules will and will not claim
+
+They will tell you what a model costs, what the alternatives cost, and what the
+difference would be at your trigger frequency. That is arithmetic.
+
+They will **never** tell you a cheaper model is good enough for your task. A
+linter has not seen your prompt or your data, and swapping a frontier model for
+a small one is a change of product, not a configuration tweak. Suggestions step
+down at most one capability tier, prefer the same vendor first (no new account,
+no new credential), and end by pointing at an eval harness for the question the
+linter cannot answer.
+
+Every estimate prints the assumptions behind it — assumed token counts, runs per
+month, and the date the price table was last checked. An estimate that hides its
+inputs is the same trick as an ROI projection that hides its baseline.
 
 Every default is calibrated against real workflows to keep false positives near
 zero — see [Calibration](#calibration) for the measured rates. The five error
@@ -125,13 +144,16 @@ rules block a merge; the rest are advisory unless you opt into `--strict`.
 A linter that cries wolf gets disabled, and then it protects nothing. Every rule
 is measured against a corpus of 59 real published workflows before it ships:
 
-| Rule | Files it fires on |
-|---|---|
-| `embedded-secret` | 0% |
-| `credential-in-url` | 0% |
-| `error-output-swallowed` | 15% |
-| `default-node-names` | 20% |
-| `missing-timeout` | 42% |
+| Rule | Files it fires on | Outcome |
+|---|---|---|
+| `embedded-secret` | 0% | shipped as error |
+| `credential-in-url` | 0% | shipped as error |
+| `expensive-model-high-frequency` | 0% | shipped as warning — never fired on the corpus |
+| `polling-trigger-cost` | 0% | shipped as warning — never fired on the corpus |
+| `error-output-swallowed` | 15% | shipped as warning |
+| `default-node-names` | 20% | shipped as info |
+| `missing-timeout` | 42% | shipped as warning |
+| `llm-cost-unbounded` | **85%** | **downgraded to info** |
 
 The bar for accepting a rule:
 
@@ -141,6 +163,48 @@ The bar for accepting a rule:
   defect. It gets downgraded to info or cut.
 - Rules are measured in isolation, one at a time, so a noisy rule cannot hide
   behind a quiet one.
+
+Two results from the last pass worth stating plainly, because a calibration
+section that only ever vindicates its author is decoration:
+
+**`llm-cost-unbounded` failed the bar and was downgraded.** It fires on 85% of
+the corpus, because n8n does not set a token cap by default. Flagging the default
+state of almost every workflow as a warning is a preference, not a defect —
+however defensible the preference. It ships as info; raise it in
+`.n8nlintrc.json` if a runaway bill is a live concern for you.
+
+**Two cost rules never fired at all.** 0% here means "no false positives" and
+nothing more — the corpus happens to contain no frontier model on a fast
+schedule. They are covered by fixtures, not by production evidence, and that is
+a weaker claim than the 0% next to `embedded-secret`, which was measured against
+workflows that do contain secrets-adjacent patterns.
+
+Model coverage is measured too. Across the corpus, 66% of LLM nodes resolve to a
+priced model; the remainder set no model parameter at all and inherit the node's
+default, which cannot be priced from the file. An earlier pass sat at 28%, which
+looked like "no expensive models found" and was actually a gap in the price
+table — worth knowing that a quiet rule and a broken rule look identical from
+the outside.
+
+## The price table
+
+`src/n8n_linter/pricing.py` carries per-model prices, capability tiers, and a
+`LAST_VERIFIED` date. It is hand-maintained on purpose: fetching prices at
+runtime would mean a network call from a tool whose promise is that it reads your
+workflow offline and sends nothing anywhere.
+
+Every row records where its number came from — `PRIMARY` for the vendor's own
+pricing page, `AGGREGATE` for a third-party tracker. Aggregate figures are
+labelled in the output, because they are usually right and occasionally months
+behind, and nobody should quote one to a client without checking.
+
+Every cost report prints the verification date. Once the table is more than 90
+days old it says so in the output rather than continuing to sound confident. The
+failure mode is designed to be "this might be stale", never a wrong number
+stated well.
+
+Updating it is a one-file pull request. Prices move monthly; corrections are
+welcome.
 
 ## Use it in CI
 

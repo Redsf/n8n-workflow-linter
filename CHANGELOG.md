@@ -4,7 +4,51 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.2.0] — 2026-07-31
+
+### Added
+
+- **Cost rules.** Three rules that ask a question no other n8n linter asks: what
+  will this workflow spend, and is that the cheapest way to get the job done.
+  - `expensive-model-high-frequency` (warning) — a frontier-tier model on a
+    schedule firing more than hourly. Reports an estimated monthly range, names
+    cheaper models with the saving for each, and prints every assumption behind
+    the number.
+  - `polling-trigger-cost` (warning) — a schedule firing more often than every
+    five minutes, where a webhook would be both cheaper and faster.
+  - `llm-cost-unbounded` (info) — an LLM node with no `maxTokens`.
+- `pricing.py` — per-model prices, capability tiers, and a `LAST_VERIFIED` date,
+  covering OpenAI, Anthropic, Google, DeepSeek, Moonshot, Zhipu, MiniMax,
+  Alibaba, xAI, Mistral and Groq-hosted open weights. Each row records whether
+  its price came from the vendor's own page or a third-party tracker, and the
+  distinction is surfaced in the output. Reports go stale loudly after 90 days
+  rather than continuing to sound confident.
+- `RuleHit.detail` — per-finding computed context, rendered by `--format plain`
+  and omitted from the one-line formats.
+
+### Changed
+
+- Cost suggestions never claim a cheaper model is good enough for the task. They
+  step down at most one capability tier, prefer the same vendor first (no new
+  account or credential to add), and route the quality question to an eval
+  harness.
+
+### Calibration
+
+Measured against 59 published workflows, one rule at a time:
+
+- `expensive-model-high-frequency` 0%, `polling-trigger-cost` 0% — no false
+  positives, but the corpus contains no case that triggers them, so these are
+  covered by fixtures rather than production evidence.
+- `llm-cost-unbounded` 85% — **failed the documented bar and was downgraded from
+  warning to info.** n8n sets no token cap by default, so flagging it as a
+  warning describes a preference rather than a defect.
+- Price-table coverage across the corpus is 66% of LLM nodes; the rest set no
+  model parameter and inherit the node default, which a file cannot reveal. An
+  earlier pass measured 28% and looked like a clean result — it was a gap in the
+  table, not an absence of expensive models.
+
+## [0.1.1] — 2026-07-30
 
 ### Added
 
