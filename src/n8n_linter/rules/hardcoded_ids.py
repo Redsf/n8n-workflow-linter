@@ -48,6 +48,20 @@ class HardcodedResourceId(Rule):
     id = "hardcoded-resource-id"
     default_severity = Severity.WARNING
     summary = "A hardcoded Google file ID or Gmail label ID is baked into the workflow."
+    plain_title = "One specific Google file or Gmail label is locked into this workflow"
+    plain_meaning = (
+        "The workflow does not say 'the customer spreadsheet' — it says the exact ID "
+        "of one particular spreadsheet, drive file, or Gmail label in your account. "
+        "Not a password, so nobody can open it without access. But it tells a reader "
+        "which file you use, and if someone else imports this workflow it will point "
+        "at your file instead of theirs, and simply fail."
+    )
+    plain_fix = (
+        "Fine to leave if this workflow is only ever going to run in your account.\n"
+        "Before sharing it: open the node in n8n and either pick the file from the "
+        "dropdown list each time, or replace the ID with the word REPLACE_ME so the "
+        "next person knows they have to set it."
+    )
 
     def check(self, workflow: Workflow) -> Iterable[RuleHit]:
         text = workflow.raw_text

@@ -77,3 +77,55 @@ def test_list_rules_exits_zero(capsys):
 def test_malformed_file_is_reported_as_error(capsys):
     assert run([str(FIXTURES / "malformed.json")]) == EXIT_FINDINGS
     assert "invalid-workflow" in capsys.readouterr().out
+
+
+def test_plain_format_leads_with_a_verdict(capsys):
+    assert run([str(FIXTURES / "leaky.json"), "--format", "plain"]) == EXIT_FINDINGS
+    out = capsys.readouterr().out
+    assert "DO NOT SHARE THIS FILE YET" in out
+    assert "What this means" in out
+    assert "How to fix it" in out
+
+
+def test_plain_format_says_safe_when_only_warnings(capsys):
+    assert run([str(FIXTURES / "unreliable.json"), "--format", "plain"]) == EXIT_OK
+    out = capsys.readouterr().out
+    assert "SAFE TO SHARE" in out
+    assert "DO NOT SHARE" not in out
+
+
+def test_plain_format_says_all_clear_on_a_clean_file(capsys):
+    assert run([str(FIXTURES / "clean.json"), "--format", "plain"]) == EXIT_OK
+    assert "ALL CLEAR" in capsys.readouterr().out
+
+
+def test_explain_flag_is_shorthand_for_plain(capsys):
+    run([str(FIXTURES / "leaky.json"), "--explain"])
+    explained = capsys.readouterr().out
+    run([str(FIXTURES / "leaky.json"), "--format", "plain"])
+    assert explained == capsys.readouterr().out
+
+
+def test_plain_format_explains_an_unparseable_file(capsys):
+    assert run([str(FIXTURES / "malformed.json"), "--explain"]) == EXIT_FINDINGS
+    out = capsys.readouterr().out
+    # Falls back to load-error copy rather than crashing on a missing Rule class.
+    assert "not a workflow n8n can read" in out
+
+
+def test_plain_format_does_not_repeat_an_explanation_per_node(capsys):
+    # unreliable.json trips orphan-node on two separate nodes; the explanation
+    # should appear once, with both node names listed.
+    run([str(FIXTURES / "unreliable.json"), "--explain"])
+    out = capsys.readouterr().out
+    assert out.count("A step is floating loose and will never run") == 1
+    assert "Steps affected:" in out
+
+
+def test_every_rule_has_plain_language_copy():
+    from n8n_linter.rules import ALL_RULES
+
+    for rule in ALL_RULES:
+        assert rule.plain_title, f"{rule.id} has no plain_title"
+        assert rule.plain_meaning, f"{rule.id} has no plain_meaning"
+        assert rule.plain_fix, f"{rule.id} has no plain_fix"

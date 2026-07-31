@@ -26,6 +26,22 @@ class RealCredentialId(Rule):
     id = "real-credential-id"
     default_severity = Severity.ERROR
     summary = "A credential references a real instance ID instead of a placeholder."
+    plain_title = "This file points at a login that only exists in your own n8n account"
+    plain_meaning = (
+        "When you connect an account in n8n (Gmail, OpenAI, Sheets), n8n stores it "
+        "and gives it a private ID number. That ID number is now written inside this "
+        "file. It is not your password, but it does two annoying things: it tells "
+        "anyone who reads the file which of your accounts you used, and it makes the "
+        "file fail to import for anybody else, because their n8n has different ID "
+        "numbers."
+    )
+    plain_fix = (
+        "If this file is just for you, you can ignore this.\n"
+        "If you are about to share it, publish it, or put it on GitHub: open the "
+        "file in a text editor, find the ID shown above, and replace it with the "
+        "words REPLACE_WITH_CREDENTIAL_ID. The person importing it then picks their "
+        "own account instead."
+    )
 
     def check(self, workflow: Workflow) -> Iterable[RuleHit]:
         for node in workflow.nodes:

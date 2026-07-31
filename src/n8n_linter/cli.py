@@ -8,6 +8,7 @@ import sys
 from . import __version__
 from .config import ConfigError, apply_cli_disables, load_config
 from .engine import lint_paths
+from .explain import format_plain
 from .report import (
     Severity,
     format_github,
@@ -31,9 +32,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--config", help=f"path to a config file (default: .n8nlintrc.json if present)")
     parser.add_argument(
         "--format",
-        choices=("text", "github", "json"),
+        choices=("text", "plain", "github", "json"),
         default="text",
-        help="output format (default: text)",
+        help="output format (default: text; 'plain' explains each finding in "
+             "non-technical language with n8n fix steps)",
+    )
+    parser.add_argument(
+        "--explain",
+        action="store_true",
+        help="shorthand for --format plain",
     )
     parser.add_argument(
         "--strict",
@@ -84,9 +91,14 @@ def main(argv: list[str] | None = None) -> int:
     summary = summarize(findings, files_checked)
 
     color = sys.stdout.isatty() and not args.no_color
-    if args.format == "json":
+    output_format = "plain" if args.explain else args.format
+
+    if output_format == "json":
         print(format_json(findings, summary))
-    elif args.format == "github":
+    elif output_format == "plain":
+        if files_checked:
+            print(format_plain(findings, summary, files_checked))
+    elif output_format == "github":
         if findings:
             print(format_github(findings))
         _print_summary(summary, files_checked)

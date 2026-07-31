@@ -46,12 +46,56 @@ n8n-lint workflows/
 # Lint a single file
 n8n-lint workflows/cold_email.json
 
+# Explain every finding in plain language, with n8n fix steps
+n8n-lint workflows/cold_email.json --explain
+
 # Fail on warnings too, not just errors
 n8n-lint workflows/ --strict
 
 # See every rule
 n8n-lint --list-rules
 ```
+
+### `--explain` — for people who build in the n8n UI, not in JSON
+
+The default output is a linter report: one terse line per finding. `--explain`
+answers a different question — *is this safe to send to someone, and what do I
+click to fix it?*
+
+```
+========================================================================
+  Social Media AI Agent - Telegram.json
+========================================================================
+
+  SAFE TO SHARE — no passwords or API keys are inside this file.
+
+  Nothing is leaking. But 4 thing(s) below will make this workflow
+  fragile or confusing later. None of them stop it working today.
+
+------------------------------------------------------------------------
+  WORTH FIXING — these cause problems later
+------------------------------------------------------------------------
+
+  [~] 1. Nobody gets told when this workflow breaks
+
+  Detail: no active Error Trigger — a workflow failure will not alert
+  anyone
+
+  What this means
+    Right now, if this workflow fails at 3am, it fails quietly. No
+    email, no message. You find out days later when you notice nothing
+    has happened — or worse, a client notices first. ...
+
+  How to fix it
+    Build a tiny second workflow that does the shouting:
+    1. New workflow in n8n → add node → search 'Error Trigger' → add it.
+    ...
+```
+
+It leads with a verdict (`DO NOT SHARE THIS FILE YET` / `SAFE TO SHARE` /
+`ALL CLEAR`), groups by rule so an explanation appears once no matter how many
+nodes tripped it, and writes every fix as clicks in n8n rather than edits to
+the JSON. Exit codes are unchanged, so it is safe in scripts.
 
 ## The rules
 
@@ -140,7 +184,8 @@ n8n-lint workflows/ --disable missing-retry --disable disabled-node
 
 | `--format` | Use it for |
 |---|---|
-| `text` (default) | Humans. Colored when writing to a terminal; use `--no-color` to disable. |
+| `text` (default) | Humans reading a diff. Colored when writing to a terminal; use `--no-color` to disable. |
+| `plain` | Humans who do not read JSON. Verdict first, then what each finding means and how to fix it in n8n. `--explain` is shorthand for this. |
 | `github` | GitHub Actions. Emits `::error`/`::warning` workflow commands for inline PR annotations. |
 | `json` | Scripting and dashboards. Stable schema: `{summary, findings[]}`. |
 
