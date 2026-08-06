@@ -6,8 +6,37 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **The web report is now shaped like an inspection certificate** rather than a
+  dashboard. A card grid presents eleven findings as eleven equal tiles, when the
+  information is that two of them expose a credential and six are naming nits.
+  The page now leads with a colophon recording who issued the check and against
+  what, states the verdict in the largest type on the page, and lists findings as
+  a numbered schedule, worst first, separated by hairlines.
+- One rule governs the palette: the only colour on the page is a finding. Buttons
+  and links are ink, focus is a system blue, nothing is tinted for atmosphere.
+- No web fonts, which is principle more than craft: the page claims nothing is
+  requested while you use it, and a font call would be a footnote on that claim.
+- Fixed rem type scale in place of fluid clamps, which suit pages read at
+  arbitrary widths rather than a tool read at a desk.
+
+### Fixed
+
+- The paste panel was open on page load: a class setting `display` outranks the
+  user-agent rule for `[hidden]`.
+- Fix steps that open with a lead-in sentence swept that sentence into the list
+  as step 1, pushing every real step down a number.
+- The pre-formatted cost block widened the whole page on mobile instead of
+  scrolling inside itself, because grid children default to `min-width: auto`.
+- The record block held 375px of non-wrapping labels on a 320px screen.
+
 ### Added
 
+- `PRODUCT.md` recording the register, the two audiences the page serves, and the
+  principles it was built against.
+- A print stylesheet. The output is a document, so it should survive being
+  printed like one.
 - **A browser build**, deployed to GitHub Pages. Drop a workflow export on the
   page and get the same 17 rules, verdict, and plain-language explanations with
   no Python and no terminal.
