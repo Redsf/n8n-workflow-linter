@@ -1,12 +1,13 @@
-/* n8n Workflow Inspection — browser front end.
+/* n8n Workflow Check — browser front end.
  *
  * The linting is not reimplemented here. This loads the actual Python package
  * into Pyodide and calls `n8n_linter.api.analyze`, so the browser and the CLI
  * cannot drift: same rules, same severities, same plain-language copy, one
  * source of truth. CI builds the wheel from this repo on every push.
  *
- * Pyodide is fetched lazily, only once someone picks a file, so the page itself
- * stays light for anyone who is only reading it.
+ * Findings render as <details> rows rather than JS-managed panels: native
+ * disclosure is keyboard-operable, announced correctly, findable by the
+ * browser's own in-page search, and printable when forced open.
  */
 
 const PYODIDE_VERSION = "0.26.4";
@@ -26,14 +27,14 @@ const ui = {
   pastePanel: el("paste-panel"),
   pasteArea: el("paste-area"),
   pasteRun: el("paste-run"),
-  docFile: el("doc-file"),
   verdict: el("verdict"),
-  record: el("record"),
+  meta: el("meta"),
   scheduleWrap: el("schedule-wrap"),
   findings: el("findings"),
   techOutput: el("tech-output"),
   viewPlain: el("view-plain"),
   viewTech: el("view-tech"),
+  expandAll: el("expand-all"),
   copyBtn: el("copy-report"),
   downloadBtn: el("download-report"),
   againBtn: el("check-another"),
@@ -41,6 +42,11 @@ const ui = {
   infoToggleWrap: el("info-toggle-wrap"),
   ruleList: el("rule-list"),
   versionTag: el("version-tag"),
+  statusbar: el("statusbar"),
+  sbMark: el("sb-mark"),
+  sbFile: el("sb-file"),
+  sbTally: el("sb-tally"),
+  sbAgain: el("sb-again"),
 };
 
 let pyodide = null;
@@ -50,7 +56,6 @@ let showInfo = false;
 
 /* ---------------------------------------------------------------- engine */
 
-/** Mark a named progress step active, and everything before it done. */
 function step(name) {
   const order = ["engine", "rules", "scan"];
   const at = order.indexOf(name);
@@ -71,8 +76,6 @@ async function bootPython() {
   step("rules");
   await pyodide.loadPackage("micropip");
 
-  // CI writes this manifest beside the wheel so the filename can carry the
-  // version without the page needing to know it in advance.
   const manifest = await fetch(new URL("./dist/wheel.json", import.meta.url))
     .then((r) => (r.ok ? r.json() : null))
     .catch(() => null);
@@ -104,7 +107,7 @@ _run
 
 function renderRuleList() {
   const rules = JSON.parse(pyodide.runPython("import json; json.dumps(rule_catalogue())"));
-  const label = { error: "Must fix", warning: "Worth fixing", info: "Note" };
+  const label = { error: "Must fix", warning: "Fix soon", info: "Note" };
   ui.ruleList.innerHTML = rules
     .map(
       (r) => `<div class="rule-row">
@@ -121,6 +124,7 @@ function show(panel) {
   ui.intake.hidden = panel !== "intake";
   ui.loading.hidden = panel !== "loading";
   ui.results.hidden = panel !== "results";
+  syncStatusbar();
 }
 
 async function check(text, filename) {
@@ -129,26 +133,22 @@ async function check(text, filename) {
   try {
     const run = await bootPython();
     step("scan");
-    // Yield a frame so the step paints before Python blocks the thread.
     await new Promise((r) => setTimeout(r, 0));
 
     lastResult = JSON.parse(run(text, filename));
     showInfo = false;
-    setView("plain");
     render(lastResult);
     show("results");
-    ui.results.scrollIntoView({ block: "start", behavior: "smooth" });
+    setView("plain");
+    ui.results.scrollIntoView({ block: "start" });
   } catch (err) {
     show("results");
-    ui.docFile.textContent = filename;
     ui.verdict.className = "verdict v-void";
     ui.verdict.innerHTML = `
-      <p class="verdict-mark"><span class="verdict-glyph">!</span>Not completed</p>
-      <p class="verdict-statement">The checker could not start</p>
-      <p class="verdict-detail">${escapeHtml(err.message || String(err))}</p>
-      <p class="verdict-detail">The command-line version works offline:
-        <code>pip install git+https://github.com/Redsf/n8n-workflow-linter</code></p>`;
-    ui.record.innerHTML = "";
+      <p class="verdict-mark">Not checked</p>
+      <p class="verdict-line">The checker could not start</p>
+      <p class="verdict-say">${escapeHtml(err.message || String(err))}</p>`;
+    ui.meta.textContent = filename;
     ui.findings.innerHTML = "";
     ui.scheduleWrap.hidden = true;
     ui.infoToggleWrap.hidden = true;
@@ -160,101 +160,82 @@ async function check(text, filename) {
 const VERDICT = {
   leak: (r) => ({
     cls: "v-fail",
-    glyph: "✗",
     mark: "Not safe to share",
-    statement: "Do not send this file yet",
-    detail: `${r.summary.errors} credential${r.summary.errors === 1 ? "" : "s"} ${
-      r.summary.errors === 1 ? "is" : "are"
-    } written inside this file in plain text. Anyone who receives it can read and
-      use ${r.summary.errors === 1 ? "it" : "them"}. Treat ${
-      r.summary.errors === 1 ? "it" : "them"
-    } as already exposed: regenerate at the source, fix the items below, export
-      again, then check it again.`,
+    line: "Do not send this file",
+    say: `${r.summary.errors} credential${r.summary.errors === 1 ? " sits" : "s sit"} in
+      this file as readable text. Treat ${r.summary.errors === 1 ? "it" : "them"} as
+      already exposed: regenerate at the source, then fix the rows below.`,
   }),
-  safe: (r) => ({
+  safe: () => ({
     cls: "v-warn",
-    glyph: "✓",
     mark: "Safe to share",
-    statement: "No credentials are exposed",
-    detail: `Nothing in this file will leak a password or an API key. ${
-      r.summary.warnings + r.summary.info === 1
-        ? "One finding below is"
-        : `${r.summary.warnings + r.summary.info} findings below are`
-    } worth attention: they make the workflow fragile, or more expensive than it
-      needs to be. None of them stop it working today.`,
+    line: "No keys are exposed",
+    say: `Nothing here leaks a password or an API key. The rows below will make
+      this workflow fragile or expensive, but none of them stop it working.`,
   }),
   clean: () => ({
     cls: "v-pass",
-    glyph: "✓",
     mark: "Passed",
-    statement: "Nothing to fix",
-    detail: `No credentials exposed, no missing safety nets, no loose ends. Safe
-      to share, and set up to tell you when something goes wrong.`,
+    line: "Nothing to fix",
+    say: "No exposed keys, no missing safety nets, no loose ends.",
   }),
   unreadable: (r) => ({
     cls: "v-void",
-    glyph: "!",
     mark: "Not checked",
-    statement: "This file could not be read",
-    detail: `${escapeHtml(r.error || "")}. Open the workflow in n8n, use the
-      three-dots menu at the top right, then Download, and make sure the whole
-      file is saved.`,
+    line: "This file could not be read",
+    say: `${escapeHtml(r.error || "")}. In n8n, use the three-dots menu at the top
+      right, then Download.`,
   }),
 };
 
 function render(r) {
   const v = VERDICT[r.verdict](r);
 
-  ui.docFile.textContent = r.workflow_name && r.workflow_name !== r.filename
-    ? `${r.filename} · ${r.workflow_name}`
-    : r.filename;
-
   ui.verdict.className = `verdict ${v.cls}`;
   ui.verdict.innerHTML = `
-    <p class="verdict-mark"><span class="verdict-glyph">${v.glyph}</span>${v.mark}</p>
-    <p class="verdict-statement">${v.statement}</p>
-    <p class="verdict-detail">${v.detail}</p>`;
+    <p class="verdict-mark">${v.mark}</p>
+    <p class="verdict-line">${v.line}</p>
+    <p class="verdict-say">${v.say}</p>`;
 
-  ui.record.innerHTML = r.ok
+  const s = r.summary;
+  ui.meta.innerHTML = r.ok
     ? [
-        ["Findings", tally(r.summary)],
-        ["Steps checked", `${r.summary.nodes}`],
-        ["Rules applied", "17"],
-        ["Checked", new Date().toISOString().slice(0, 10)],
+        escapeHtml(r.filename),
+        `${s.nodes} steps`,
+        "17 rules",
+        s.errors ? `<span class="m-fail"><b>${s.errors}</b> must fix</span>` : "",
+        s.warnings ? `<span class="m-warn"><b>${s.warnings}</b> fix soon</span>` : "",
+        s.info ? `<span class="m-note"><b>${s.info}</b> note${s.info === 1 ? "" : "s"}</span>` : "",
       ]
-        .map(([k, val]) => `<dt>${k}</dt><dd>${val}</dd>`)
+        .filter(Boolean)
+        .map((x) => `<span>${x}</span>`)
         .join("")
+    : escapeHtml(r.filename);
+
+  // Status bar mirrors the verdict once it scrolls out of view.
+  ui.sbMark.className = `sb-mark ${v.cls}`;
+  ui.sbMark.textContent = v.mark;
+  ui.sbFile.textContent = r.filename;
+  ui.sbTally.textContent = r.ok
+    ? `${s.errors} must fix · ${s.warnings} fix soon · ${s.info} notes`
     : "";
 
   ui.scheduleWrap.hidden = !r.ok || r.groups.length === 0;
-  renderSchedule(r);
+  renderList(r);
   ui.techOutput.textContent = technicalReport(r);
-}
-
-function tally(s) {
-  const parts = [
-    [s.errors, "must fix", "t-fail"],
-    [s.warnings, "worth fixing", "t-warn"],
-    [s.info, "note" + (s.info === 1 ? "" : "s"), "t-note"],
-  ].filter(([n]) => n > 0);
-  if (!parts.length) return "none";
-  return `<span class="tally">${parts
-    .map(([n, label, cls]) => `<span class="${cls}"><b>${n}</b> ${label}</span>`)
-    .join("")}</span>`;
 }
 
 const SEV = {
   error: { cls: "is-fail", label: "Must fix" },
-  warning: { cls: "is-warn", label: "Worth fixing" },
+  warning: { cls: "is-warn", label: "Fix soon" },
   info: { cls: "is-note", label: "Note" },
 };
 
-function renderSchedule(r) {
+function renderList(r) {
   const visible = r.groups.filter((g) => showInfo || g.severity !== "info");
-  ui.findings.innerHTML = visible.map(itemHtml).join("");
+  ui.findings.innerHTML = visible.map(rowHtml).join("");
+  syncExpandLabel();
 
-  // Count findings rather than rule groups: the record above counts findings,
-  // and "6 notes" beside "show 2 notes" reads as a bug in the tool.
   const hidden = r.groups
     .filter((g) => g.severity === "info")
     .reduce((n, g) => n + g.count, 0);
@@ -265,45 +246,39 @@ function renderSchedule(r) {
   }
   ui.infoToggleWrap.hidden = false;
   ui.infoToggle.textContent = showInfo
-    ? "Hide minor notes"
-    : `Show ${hidden} minor note${hidden === 1 ? "" : "s"}`;
+    ? "Hide notes"
+    : `Show ${hidden} note${hidden === 1 ? "" : "s"}`;
 }
 
-function itemHtml(g, i) {
+function rowHtml(g, i) {
   const sev = SEV[g.severity];
-  const where = g.nodes.length
-    ? `<p class="item-where">${g.nodes.length === 1 ? "Step" : "Steps"}: ${g.nodes
-        .map((n) => `<code>${escapeHtml(n)}</code>`)
-        .join(" ")}</p>`
-    : `<p class="item-where">${escapeHtml(g.message)}</p>`;
+  // Errors open by default: the reason someone ran this is to see those.
+  const open = g.severity === "error" ? " open" : "";
+  const where = g.nodes.length ? g.nodes.join(", ") : "";
 
-  const data = g.details
-    .map((d) => `<pre class="item-data">${escapeHtml(d)}</pre>`)
-    .join("");
+  const data = g.details.map((d) => `<pre class="r-data">${escapeHtml(d)}</pre>`).join("");
 
   return `
-  <li class="item ${sev.cls}">
-    <div class="item-mark">
-      <span class="item-no">${String(i + 1).padStart(2, "0")}</span>
-      <span class="item-sev">${sev.label}</span>
-    </div>
-    <div>
-      <h4 class="item-title">${escapeHtml(g.title)}</h4>
-      ${where}
-      ${data}
-      ${g.meaning ? `<div class="item-note"><p class="field-label">What this means</p><p>${escapeHtml(g.meaning)}</p></div>` : ""}
-      ${g.fix ? `<div class="item-note"><p class="field-label">How to fix it</p>${fixHtml(g.fix)}</div>` : ""}
-      <p class="item-rule">${g.rule}</p>
-    </div>
+  <li>
+    <details class="row ${sev.cls}"${open}>
+      <summary>
+        <span class="r-no">${String(i + 1).padStart(2, "0")}</span>
+        <span class="r-sev">${sev.label}</span>
+        <span class="r-title">${escapeHtml(g.title)}</span>
+        <span class="r-where">${escapeHtml(where)}</span>
+        <span class="r-chev" aria-hidden="true"></span>
+      </summary>
+      <div class="r-body">
+        ${data}
+        ${g.meaning ? `<div><p class="label">What this means</p><p>${escapeHtml(g.meaning)}</p></div>` : ""}
+        ${g.fix ? `<div><p class="label">How to fix it</p>${fixHtml(g.fix)}</div>` : ""}
+        <p class="r-id">${g.rule}</p>
+      </div>
+    </details>
   </li>`;
 }
 
-/** Numbered fixes become an ordered list; prose stays paragraphs.
- *
- * Several rules open with a sentence before the steps ("Two independent
- * questions, worth answering in this order."). Sweeping every line into the list
- * makes that lead-in item 1 and pushes each real step down a number, so the
- * preamble is split off and kept as prose. */
+/** Numbered fixes become an ordered list; a lead-in sentence stays prose. */
 function fixHtml(fix) {
   const lines = fix.split("\n").map((l) => l.trim()).filter(Boolean);
   const first = lines.findIndex((l) => /^\d+\./.test(l));
@@ -313,23 +288,17 @@ function fixHtml(fix) {
     return lines.map((l) => `<p>${escapeHtml(l)}</p>`).join("");
   }
 
-  // A step can wrap onto following unnumbered lines; append those to the step
-  // they belong to rather than starting a new one.
   const steps = [];
   for (const line of numbered) {
     if (/^\d+\./.test(line)) steps.push(line.replace(/^\d+\.\s*/, ""));
     else if (steps.length) steps[steps.length - 1] += ` ${line}`;
   }
-
   const preamble = lines
     .slice(0, first === -1 ? 0 : first)
     .map((l) => `<p>${escapeHtml(l)}</p>`)
     .join("");
 
-  return (
-    preamble +
-    `<ol class="item-fix">${steps.map((s) => `<li>${escapeHtml(s)}</li>`).join("")}</ol>`
-  );
+  return preamble + `<ol class="r-fix">${steps.map((s) => `<li>${escapeHtml(s)}</li>`).join("")}</ol>`;
 }
 
 /* --------------------------------------------------------------- report */
@@ -351,21 +320,22 @@ function technicalReport(r) {
 }
 
 function plainReport(r) {
-  if (!r.ok) return `${r.filename}\n\nNot a readable workflow: ${r.error}`;
+  if (!r.ok) return `${r.filename}\n\nNot readable: ${r.error}`;
   const v = VERDICT[r.verdict](r);
+  const s = r.summary;
   const out = [
-    "WORKFLOW INSPECTION REPORT",
-    "=".repeat(62),
-    `File      ${r.filename}`,
-    `Checked   ${new Date().toISOString().slice(0, 10)}`,
-    `Result    ${v.mark.toUpperCase()}`,
-    `Findings  ${r.summary.errors} must fix, ${r.summary.warnings} worth fixing, ${r.summary.info} note(s)`,
+    "N8N WORKFLOW CHECK",
+    "=".repeat(60),
+    `File     ${r.filename}`,
+    `Checked  ${new Date().toISOString().slice(0, 10)}`,
+    `Result   ${v.mark.toUpperCase()}`,
+    `Found    ${s.errors} must fix, ${s.warnings} fix soon, ${s.info} note(s)`,
     "",
-    v.statement,
-    stripTags(v.detail).replace(/\s+/g, " ").trim(),
+    v.line,
+    stripTags(v.say).replace(/\s+/g, " ").trim(),
     "",
-    "SCHEDULE OF FINDINGS",
-    "=".repeat(62),
+    "FINDINGS",
+    "=".repeat(60),
   ];
   r.groups.forEach((g, i) => {
     out.push("", `${String(i + 1).padStart(2, "0")}  [${SEV[g.severity].label}]  ${g.title}`);
@@ -377,10 +347,9 @@ function plainReport(r) {
   });
   out.push(
     "",
-    "=".repeat(62),
-    "Checked with n8n-workflow-linter",
+    "=".repeat(60),
     "github.com/Redsf/n8n-workflow-linter",
-    "The workflow file was not uploaded; this ran in the browser."
+    "Checked in the browser. The file was not uploaded."
   );
   return out.join("\n");
 }
@@ -400,15 +369,21 @@ const stripTags = (s) => String(s).replace(/<[^>]*>/g, "");
 function readFile(file) {
   if (!file) return;
   if (file.size > 12 * 1024 * 1024) {
-    window.alert(
-      "That file is over 12 MB, far larger than any n8n export. Check it is the right file."
-    );
+    window.alert("That file is over 12 MB, far larger than any n8n export.");
     return;
   }
   const reader = new FileReader();
   reader.onload = () => check(String(reader.result), file.name);
   reader.onerror = () => window.alert("That file could not be read.");
   reader.readAsText(file);
+}
+
+const rows = () => [...ui.findings.querySelectorAll("details.row")];
+
+function syncExpandLabel() {
+  const all = rows();
+  const allOpen = all.length > 0 && all.every((d) => d.open);
+  ui.expandAll.textContent = allOpen ? "Collapse all" : "Expand all";
 }
 
 /* --------------------------------------------------------------- wiring */
@@ -436,9 +411,10 @@ for (const evt of ["dragleave", "drop"]) {
 }
 ui.dropzone.addEventListener("drop", (e) => readFile(e.dataTransfer.files[0]));
 
-// A stray drop elsewhere on the page would otherwise navigate away from the app.
 window.addEventListener("dragover", (e) => e.preventDefault());
 window.addEventListener("drop", (e) => e.preventDefault());
+
+ui.findings.addEventListener("toggle", syncExpandLabel, true);
 
 ui.trySample.addEventListener("click", async () => {
   show("loading");
@@ -470,25 +446,33 @@ function setView(mode) {
   const plain = mode === "plain";
   ui.scheduleWrap.hidden = !plain || !lastResult?.groups.length;
   ui.techOutput.hidden = plain;
+  ui.expandAll.hidden = !plain;
   ui.viewPlain.classList.toggle("is-on", plain);
   ui.viewTech.classList.toggle("is-on", !plain);
   ui.viewPlain.setAttribute("aria-pressed", String(plain));
   ui.viewTech.setAttribute("aria-pressed", String(!plain));
-  if (plain && lastResult?.ok) renderSchedule(lastResult);
+  if (plain && lastResult?.ok) renderList(lastResult);
 }
+
+ui.expandAll.addEventListener("click", () => {
+  const all = rows();
+  const open = !(all.length > 0 && all.every((d) => d.open));
+  all.forEach((d) => (d.open = open));
+  syncExpandLabel();
+});
 
 ui.infoToggle.addEventListener("click", () => {
   showInfo = !showInfo;
-  renderSchedule(lastResult);
+  renderList(lastResult);
 });
 
 ui.copyBtn.addEventListener("click", async () => {
   try {
     await navigator.clipboard.writeText(currentReport());
     ui.copyBtn.textContent = "Copied";
-    setTimeout(() => (ui.copyBtn.textContent = "Copy report"), 1600);
+    setTimeout(() => (ui.copyBtn.textContent = "Copy"), 1600);
   } catch {
-    window.alert("The browser blocked clipboard access. Use Download report instead.");
+    window.alert("The browser blocked clipboard access. Use Download instead.");
   }
 });
 
@@ -496,14 +480,32 @@ ui.downloadBtn.addEventListener("click", () => {
   const blob = new Blob([currentReport()], { type: "text/plain" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = `${(lastResult?.filename || "workflow").replace(/\.json$/, "")}-inspection.txt`;
+  a.download = `${(lastResult?.filename || "workflow").replace(/\.json$/, "")}-check.txt`;
   a.click();
   URL.revokeObjectURL(a.href);
 });
 
-ui.againBtn.addEventListener("click", () => {
+const reset = () => {
   ui.fileInput.value = "";
   ui.pasteArea.value = "";
   show("intake");
-  ui.intake.scrollIntoView({ block: "start", behavior: "smooth" });
-});
+  window.scrollTo({ top: 0 });
+};
+ui.againBtn.addEventListener("click", reset);
+ui.sbAgain.addEventListener("click", reset);
+
+// Reveal the status bar once the verdict has scrolled away.
+//
+// A scroll listener rather than an IntersectionObserver: the verdict starts
+// inside a `hidden` panel, and an observer set up against an element with no
+// layout box did not reliably re-fire once the panel was shown. This recomputes
+// from the element's own rect, so there is no state to get stale.
+function syncStatusbar() {
+  if (ui.results.hidden) {
+    ui.statusbar.hidden = true;
+    return;
+  }
+  ui.statusbar.hidden = ui.verdict.getBoundingClientRect().bottom > 0;
+}
+window.addEventListener("scroll", syncStatusbar, { passive: true });
+window.addEventListener("resize", syncStatusbar, { passive: true });

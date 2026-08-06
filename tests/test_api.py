@@ -114,3 +114,29 @@ def test_api_and_cli_loader_agree_on_what_a_workflow_is():
 
     for bad in ("malformed.json", "not_workflow.json"):
         assert type(api.parse(fixture(bad), bad)) is type(load(FIXTURES / bad))
+
+
+# --- the web page's static rule list ------------------------------------
+
+
+def test_static_rule_list_in_the_page_matches_the_catalogue():
+    """The page ships the rule list as HTML so the section is not blank before
+    the checker loads. That copy has no way of noticing when a rule is added,
+    renamed, or re-graded, so this asserts the two still agree."""
+    import html as html_mod
+    import re
+
+    page = (Path(__file__).parent.parent / "web" / "index.html").read_text(encoding="utf-8")
+    block = re.search(r'<div id="rule-list".*?>(.*?)</div>\s*</div>', page, re.S)
+    assert block, "could not find the #rule-list block in web/index.html"
+
+    rows = re.findall(
+        r'<span class="rule-sev (\w+)">[^<]+</span><span>(.*?)</span>', block.group(1)
+    )
+    listed = [(sev, html_mod.unescape(title)) for sev, title in rows]
+    expected = [(r["severity"], r["title"]) for r in api.rule_catalogue()]
+
+    assert listed == expected, (
+        "web/index.html rule list is out of date. Regenerate it from "
+        "api.rule_catalogue()."
+    )

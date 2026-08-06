@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>n8n Workflow Inspection — check a workflow for leaked credentials</title>
-<meta name="description" content="Check an n8n workflow export for leaked API keys, silent failures, and running cost. 17 rules, plain-English findings. Runs in your browser; the file is never uploaded.">
+<title>n8n Workflow Check — find leaked keys before you share a workflow</title>
+<meta name="description" content="Check an n8n workflow export for leaked API keys, silent failures, and running cost. 17 rules. Runs in your browser; the file is never uploaded.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='3' fill='%23191c24'/><path d='M9 16.5l4.5 4.5L23 11' fill='none' stroke='%23fff' stroke-width='2.6' stroke-linecap='square'/></svg>">
 <link rel="stylesheet" href="./style.css">
 </head>
@@ -12,192 +12,144 @@
 
 <a class="skip" href="#intake">Skip to the file check</a>
 
-<header class="masthead">
-  <div class="sheet">
-    <div class="masthead-grid">
-      <div>
-        <h1>Workflow<br>Inspection</h1>
-        <p class="masthead-sub">
-          Check an n8n export for leaked credentials, silent failures, and what it
-          costs to run. Seventeen rules. Findings written for people who build in
-          the n8n editor, not the JSON.
-        </p>
-      </div>
-      <dl class="colophon">
-        <dt>Issued by</dt>
-        <dd>n8n-workflow-linter <span id="version-tag" class="version"></span></dd>
-        <dt>Method</dt>
-        <dd>Static analysis, 17 rules</dd>
-        <dt>Calibrated against</dt>
-        <dd>59 published workflows</dd>
-        <dt>File handling</dt>
-        <dd class="seal">Never uploaded. Checked in this tab.</dd>
-      </dl>
-    </div>
+<!-- Appears only while a report is on screen and scrolled past. -->
+<div id="statusbar" class="statusbar" hidden>
+  <div class="shell statusbar-in">
+    <span id="sb-mark" class="sb-mark"></span>
+    <span id="sb-file" class="sb-file"></span>
+    <span id="sb-tally" class="sb-tally"></span>
+    <button type="button" class="btn btn-ghost btn-xs" id="sb-again">New check</button>
+  </div>
+</div>
+
+<header class="head">
+  <div class="shell head-in">
+    <h1>Is this workflow safe to share?</h1>
+    <p class="head-sub">17 checks for leaked keys, silent failures, and running cost.</p>
+    <p class="chip"><span class="chip-dot" aria-hidden="true"></span>Runs in your browser. The file is never uploaded.</p>
   </div>
 </header>
 
 <main>
 
-  <!-- ============================ intake ============================ -->
-  <section id="intake" class="band" aria-labelledby="intake-h">
-    <div class="sheet">
-      <h2 id="intake-h" class="band-title">Submit a workflow</h2>
+  <!-- ------------------------------------------------------ intake -->
+  <section id="intake" class="shell block">
+    <div id="dropzone" class="drop" tabindex="0" role="button" aria-describedby="drop-help">
+      <p class="drop-main">Drop a workflow <code>.json</code> file</p>
+      <p id="drop-help" class="drop-sub">or press Enter to browse</p>
+      <input type="file" id="file-input" accept=".json,application/json" hidden>
+    </div>
 
-      <div id="dropzone" class="intake" tabindex="0" role="button"
-           aria-describedby="intake-help">
-        <p class="intake-lede">Drop an exported <code>.json</code> file here</p>
-        <p id="intake-help" class="intake-help">or press Enter to browse for one</p>
-        <input type="file" id="file-input" accept=".json,application/json" hidden>
-      </div>
+    <div class="drop-alt">
+      <button type="button" id="try-sample" class="btn btn-solid">Try a sample</button>
+      <button type="button" id="paste-toggle" class="btn btn-line"
+              aria-expanded="false" aria-controls="paste-panel">Paste JSON</button>
+      <span class="hint">In n8n: three-dots menu, top right, then Download.</span>
+    </div>
 
-      <div class="intake-alt">
-        <button type="button" id="try-sample" class="btn btn-solid">
-          Inspect a sample workflow
-        </button>
-        <button type="button" id="paste-toggle" class="btn btn-line"
-                aria-expanded="false" aria-controls="paste-panel">
-          Paste JSON instead
-        </button>
-        <p class="intake-note">
-          No file to hand? The sample is a deliberately careless workflow with a
-          key left in it.
-        </p>
-      </div>
-
-      <div id="paste-panel" class="paste" hidden>
-        <label for="paste-area" class="field-label">Workflow JSON</label>
-        <textarea id="paste-area" rows="7" spellcheck="false"
-                  placeholder='{ "nodes": [ ... ], "connections": { ... } }'></textarea>
-        <button type="button" id="paste-run" class="btn btn-solid">Check this JSON</button>
-      </div>
-
-      <p class="intake-howto">
-        <b>Where the file comes from:</b> open the workflow in n8n, then the
-        three-dots menu at the top right, then Download.
-      </p>
+    <div id="paste-panel" class="paste" hidden>
+      <label for="paste-area" class="sr-only">Workflow JSON</label>
+      <textarea id="paste-area" rows="6" spellcheck="false"
+                placeholder='{ "nodes": [ ... ], "connections": { ... } }'></textarea>
+      <button type="button" id="paste-run" class="btn btn-solid">Check it</button>
     </div>
   </section>
 
-  <!-- ============================ progress ============================ -->
-  <section id="loading-panel" class="band" hidden aria-live="polite" aria-busy="true">
-    <div class="sheet">
-      <h2 class="band-title">Inspection in progress</h2>
-      <ol class="progress" id="progress-list">
-        <li data-step="engine"><span class="tick" aria-hidden="true"></span>Loading the checker</li>
-        <li data-step="rules"><span class="tick" aria-hidden="true"></span>Installing the 17 rules</li>
-        <li data-step="scan"><span class="tick" aria-hidden="true"></span>Reading your workflow</li>
-      </ol>
-      <p class="progress-note">
-        The checker is about 7&nbsp;MB and only downloads once. Your workflow is
-        not part of that download, and does not leave this tab.
-      </p>
-    </div>
+  <!-- ------------------------------------------------------ working -->
+  <section id="loading-panel" class="shell block" hidden aria-live="polite" aria-busy="true">
+    <ol class="steps" id="progress-list">
+      <li data-step="engine"><span class="tick" aria-hidden="true"></span>Loading the checker</li>
+      <li data-step="rules"><span class="tick" aria-hidden="true"></span>Installing 17 rules</li>
+      <li data-step="scan"><span class="tick" aria-hidden="true"></span>Reading your workflow</li>
+    </ol>
+    <p class="hint">First run downloads about 7&nbsp;MB, then caches. Your file is not part of it.</p>
   </section>
 
-  <!-- ============================ report ============================ -->
-  <section id="results-panel" class="band band-report" hidden aria-live="polite">
-    <div class="sheet">
-
-      <div class="report-head">
-        <p class="doc-kicker">Inspection report</p>
-        <p class="doc-file" id="doc-file"></p>
-      </div>
+  <!-- ------------------------------------------------------- report -->
+  <section id="results-panel" class="report" hidden aria-live="polite">
+    <div class="shell">
 
       <div id="verdict" class="verdict"></div>
+      <p id="meta" class="meta"></p>
 
-      <dl class="record" id="record"></dl>
-
-      <div class="toolbar">
-        <div class="switch" role="group" aria-label="Report format">
-          <button type="button" class="switch-btn is-on" id="view-plain" aria-pressed="true">Plain English</button>
-          <button type="button" class="switch-btn" id="view-tech" aria-pressed="false">Technical</button>
+      <div class="bar">
+        <div class="seg" role="group" aria-label="Report format">
+          <button type="button" class="seg-btn is-on" id="view-plain" aria-pressed="true">Findings</button>
+          <button type="button" class="seg-btn" id="view-tech" aria-pressed="false">Raw</button>
         </div>
-        <div class="toolbar-actions">
-          <button type="button" class="btn btn-line btn-sm" id="copy-report">Copy report</button>
-          <button type="button" class="btn btn-line btn-sm" id="download-report">Download report</button>
-          <button type="button" class="btn btn-line btn-sm" id="check-another">Check another file</button>
+        <div class="bar-right">
+          <button type="button" class="btn btn-ghost btn-xs" id="expand-all">Expand all</button>
+          <button type="button" class="btn btn-ghost btn-xs" id="copy-report">Copy</button>
+          <button type="button" class="btn btn-ghost btn-xs" id="download-report">Download</button>
+          <button type="button" class="btn btn-line btn-xs" id="check-another">New check</button>
         </div>
       </div>
 
       <div id="schedule-wrap">
-        <h3 class="band-title schedule-title">Schedule of findings</h3>
-        <ol id="findings" class="schedule"></ol>
-        <p id="info-toggle-wrap" class="schedule-more" hidden>
+        <ol id="findings" class="list"></ol>
+        <p id="info-toggle-wrap" class="list-more" hidden>
           <button type="button" id="info-toggle" class="link-btn"></button>
         </p>
       </div>
 
-      <pre id="tech-output" class="tech" hidden></pre>
+      <pre id="tech-output" class="raw" hidden></pre>
     </div>
   </section>
 
-  <!-- ============================ privacy ============================ -->
-  <section id="privacy" class="band" aria-labelledby="privacy-h">
-    <div class="sheet cols">
+  <!-- --------------------------------------------------- reference -->
+  <section class="shell block ref">
+    <div class="ref-grid">
       <div>
-        <h2 id="privacy-h" class="band-title">The file is not uploaded</h2>
-        <p>
-          This tool exists to find credentials people left inside workflow files.
-          Asking you to send that file to a server would be a strange way to build
-          it, so there is no server. The checker is the real Python linter compiled
-          to WebAssembly, running inside this tab.
-        </p>
-        <p>
-          There is no account, no database, no analytics, and no record of what you
-          checked. That also means nobody, including the author, can see your
-          results.
-        </p>
-      </div>
-      <div>
-        <p class="field-label">Verify it yourself</p>
-        <ol class="steps">
-          <li>Press <kbd>F12</kbd> and open the <b>Network</b> tab.</li>
-          <li>Let the page and the checker finish loading, then clear the list.</li>
-          <li>Drop a workflow in. No request appears.</li>
+        <h2>Nothing is uploaded</h2>
+        <p>There is no server. The checker runs inside this tab.</p>
+        <ol class="numbered">
+          <li>Open <kbd>F12</kbd> &rarr; Network.</li>
+          <li>Wait for loading to finish, clear the list.</li>
+          <li>Drop a file. No request appears.</li>
         </ol>
-        <p class="footnote">
-          For completeness: opening the page fetches its own files and the Pyodide
-          runtime from a CDN, the way any site loads a script. That happens before
-          you pick a file. There are no web fonts, so nothing else is requested
-          either.
+      </div>
+      <div>
+        <h2>What gets checked</h2>
+        <!-- Static so this section is not empty for a visitor who never runs a
+             check; app.js replaces it with the live catalogue once the checker
+             loads, and a test asserts the two agree. -->
+        <div id="rule-list" class="rules">
+          <div class="rule-row"><span class="rule-sev error">Must fix</span><span>This file points at a login that only exists in your own n8n account</span></div>
+          <div class="rule-row"><span class="rule-sev error">Must fix</span><span>A password or API key is written inside this file</span></div>
+          <div class="rule-row"><span class="rule-sev error">Must fix</span><span>A password or key is typed into a step instead of stored safely</span></div>
+          <div class="rule-row"><span class="rule-sev error">Must fix</span><span>A key is being sent inside the web address itself</span></div>
+          <div class="rule-row"><span class="rule-sev warning">Fix soon</span><span>One specific Google file or Gmail label is locked into this workflow</span></div>
+          <div class="rule-row"><span class="rule-sev warning">Fix soon</span><span>Nobody gets told when this workflow breaks</span></div>
+          <div class="rule-row"><span class="rule-sev warning">Fix soon</span><span>One bad internet moment kills the whole run</span></div>
+          <div class="rule-row"><span class="rule-sev warning">Fix soon</span><span>If the other service hangs, this step waits five minutes</span></div>
+          <div class="rule-row"><span class="rule-sev warning">Fix soon</span><span>When this step fails, the workflow carries on as if it worked</span></div>
+          <div class="rule-row"><span class="rule-sev warning">Fix soon</span><span>A step is floating loose and will never run</span></div>
+          <div class="rule-row"><span class="rule-sev warning">Fix soon</span><span>An expensive model is running on a fast schedule</span></div>
+          <div class="rule-row"><span class="rule-sev info">Note</span><span>There is no limit on how much one AI reply can cost</span></div>
+          <div class="rule-row"><span class="rule-sev warning">Fix soon</span><span>This runs every few minutes whether there is anything to do or not</span></div>
+          <div class="rule-row"><span class="rule-sev warning">Fix soon</span><span>Saved test data is stored inside this file</span></div>
+          <div class="rule-row"><span class="rule-sev warning">Fix soon</span><span>Anyone who has the link can trigger this workflow</span></div>
+          <div class="rule-row"><span class="rule-sev info">Note</span><span>Several steps are still called things like &#x27;HTTP Request1&#x27;</span></div>
+          <div class="rule-row"><span class="rule-sev info">Note</span><span>A switched-off step is still sitting on the canvas</span></div>
+        </div>
+        <p class="hint">
+          Calibrated on 59 real workflows.
+          <a href="https://github.com/Redsf/n8n-workflow-linter#calibration">See the data</a>
         </p>
       </div>
-    </div>
-  </section>
-
-  <!-- ============================ rules ============================ -->
-  <section class="band" aria-labelledby="rules-h">
-    <div class="sheet">
-      <h2 id="rules-h" class="band-title">What gets checked</h2>
-      <div id="rule-list" class="rules"></div>
-      <p class="footnote rules-note">
-        Every rule is measured against 59 real published workflows before it ships.
-        A linter that cries wolf gets switched off, so a warning that fires on more
-        than two thirds of that set is treated as an opinion rather than a defect
-        and gets demoted. One rule failed that bar and was demoted to a note.
-        <a href="https://github.com/Redsf/n8n-workflow-linter#calibration">Read the calibration data</a>.
-      </p>
     </div>
   </section>
 
 </main>
 
 <footer class="foot">
-  <div class="sheet cols">
-    <div>
-      <p class="foot-title">n8n Workflow Linter</p>
-      <p class="footnote">
-        Also a command-line tool, a GitHub Action, and a pre-commit hook, for
-        checking workflows in CI rather than by hand.
-      </p>
-    </div>
-    <p class="footnote foot-links">
+  <div class="shell foot-in">
+    <span>n8n-workflow-linter <span id="version-tag"></span></span>
+    <span class="foot-links">
       <a href="https://github.com/Redsf/n8n-workflow-linter">Source</a>
       <a href="https://github.com/Redsf">Redowan Ahmed Farhan</a>
-      <a href="https://n8n.io/creators/redowanfarhan/">n8n creator profile</a>
-      <span>MIT licensed</span>
-    </p>
+      <a href="https://n8n.io/creators/redowanfarhan/">n8n creator</a>
+    </span>
   </div>
 </footer>
 
