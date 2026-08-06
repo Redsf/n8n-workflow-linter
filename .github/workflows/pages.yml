@@ -1,0 +1,67 @@
+name: deploy web
+
+# The browser build does not carry its own copy of the rules — it installs a
+# wheel built from this repo and calls the same `n8n_linter.api.analyze` the test
+# suite covers. Rebuilding that wheel on every push to main is what stops the
+# site quietly falling behind the CLI: a rule added to the package is live on the
+# page without anyone touching JavaScript.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# A superseded deploy is not worth finishing, but never cancel one mid-flight.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        run: pip install -e ".[dev]"
+
+      # Deploying a build whose own tests fail would put a broken linter behind
+      # a public URL that says it finds leaked credentials.
+      - name: Test before publishing
+        run: python -m pytest -q
+
+      - name: Build the wheel the page loads
+        run: bash scripts/build-web.sh
+
+      - name: Check the page has everything it needs
+        run: |
+          test -f web/index.html
+          test -f web/app.js
+          test -f web/style.css
+          test -f web/sample-workflow.json
+          test -f web/dist/wheel.json
+          test -n "$(ls web/dist/*.whl)"
+          echo "web/ is complete"
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

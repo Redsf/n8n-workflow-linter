@@ -186,6 +186,33 @@ looked like "no expensive models found" and was actually a gap in the price
 table — worth knowing that a quiet rule and a broken rule look identical from
 the outside.
 
+## Use it without installing anything
+
+**[redsf.github.io/n8n-workflow-linter](https://redsf.github.io/n8n-workflow-linter)**
+
+Drop a workflow export on the page and get the same 17 rules, the same verdict,
+and the same plain-language explanations — no Python, no terminal. There is a
+sample workflow on the page if you want to see what a report looks like before
+finding a file of your own.
+
+**Your workflow is never uploaded.** This is a tool for finding leaked
+credentials; asking you to send the file containing those credentials to a server
+would be a strange way to build it. The page runs the real Python package
+compiled to WebAssembly, inside your own tab. Open your browser's Network tab and
+drop a file in — no request fires.
+
+The page is not a reimplementation. CI builds a wheel from this repo on every
+push to `main` and the page installs it, so the two cannot drift: a rule added
+here is live on the site without anyone editing JavaScript. Both front ends call
+`n8n_linter.api.analyze`, which the test suite covers.
+
+The CLI remains the right tool for CI, pre-commit, and scanning a whole folder.
+
+```bash
+bash scripts/build-web.sh   # build the wheel the page loads
+python3 -m http.server -d web 8899
+```
+
 ## The price table
 
 `src/n8n_linter/pricing.py` carries per-model prices, capability tiers, and a

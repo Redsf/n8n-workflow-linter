@@ -4,6 +4,33 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **A browser build**, deployed to GitHub Pages. Drop a workflow export on the
+  page and get the same 17 rules, verdict, and plain-language explanations with
+  no Python and no terminal.
+  - Runs the real package compiled to WebAssembly via Pyodide. The workflow file
+    is never uploaded — a tool for finding leaked credentials should not ask you
+    to send those credentials to a server, and the page invites you to confirm it
+    in the Network tab.
+  - CI rebuilds the wheel the page installs on every push to `main`, so the site
+    cannot drift from the CLI. A rule added to the package is live on the page
+    without anyone editing JavaScript.
+  - A sample workflow is bundled, so the page is useful to someone who does not
+    have an n8n export to hand — the most likely first visitor.
+  - Info-level findings are collapsed by default. With 17 rules, minor notes
+    otherwise bury the errors.
+  - Plain/technical toggle, copy and download of the report.
+- `n8n_linter.api` — `analyze()`, `analyze_json()`, and `rule_catalogue()`, for
+  callers that hold the JSON as a string and want structured results rather than
+  printed text. Returns plain dicts and lists, so `json.dumps` on the result is
+  valid; a test asserts the round trip, since on the far side it is JavaScript.
+  A second test asserts this parser and the CLI loader agree on what counts as a
+  valid workflow, so the two front ends cannot disagree about a file.
+- `scripts/build-web.sh` — builds the wheel and writes the manifest naming it.
+
 ## [0.2.0] — 2026-07-31
 
 ### Added

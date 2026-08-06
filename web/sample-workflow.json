@@ -1,0 +1,85 @@
+{
+  "name": "Sample — Daily Competitor Digest (deliberately messy)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": { "interval": [{ "field": "minutes", "minutesInterval": 2 }] }
+      },
+      "name": "Every 2 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "url": "https://api.newsfeed.example.com/v2/articles?api_key=Nk28fPq7Xz91LmVr4Ts6&limit=25",
+        "options": {}
+      },
+      "name": "HTTP Request",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [220, 0],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const apiKey = \"9Fk3Xm82QpLv61ZtRw45\";\nconst label = \"daily competitor digest\";\nreturn items.map(i => ({ json: { text: i.json.body } }));"
+      },
+      "name": "Code",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 0]
+    },
+    {
+      "parameters": { "promptType": "define", "text": "Summarise these articles." },
+      "name": "Basic LLM Chain",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.5,
+      "position": [660, 0]
+    },
+    {
+      "parameters": { "model": "claude-opus-5", "options": {} },
+      "name": "Anthropic Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.2,
+      "position": [660, 200],
+      "credentials": {
+        "anthropicApi": { "id": "REPLACE_WITH_CREDENTIAL_ID", "name": "Anthropic" }
+      }
+    },
+    {
+      "parameters": { "httpMethod": "POST", "path": "digest-inbound" },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 400]
+    },
+    {
+      "parameters": {},
+      "name": "Edit Fields",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [880, 0]
+    },
+    {
+      "parameters": {},
+      "name": "Leftover Draft Node",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [880, 400]
+    }
+  ],
+  "connections": {
+    "Every 2 Minutes": { "main": [[{ "node": "HTTP Request", "type": "main", "index": 0 }]] },
+    "HTTP Request": { "main": [[{ "node": "Code", "type": "main", "index": 0 }]] },
+    "Code": { "main": [[{ "node": "Basic LLM Chain", "type": "main", "index": 0 }]] },
+    "Basic LLM Chain": { "main": [[{ "node": "Edit Fields", "type": "main", "index": 0 }]] },
+    "Anthropic Chat Model": {
+      "ai_languageModel": [[{ "node": "Basic LLM Chain", "type": "ai_languageModel", "index": 0 }]]
+    },
+    "Webhook": { "main": [[{ "node": "Code", "type": "main", "index": 0 }]] }
+  },
+  "pinData": {
+    "Webhook": [{ "json": { "email": "ops@realcompany.example", "note": "pinned test record" } }]
+  }
+}

@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>n8n Workflow Linter — check a workflow for leaked keys</title>
+<meta name="description" content="Drop an n8n workflow export and see whether it leaks API keys, fails silently, or costs more than it should. Runs entirely in your browser — the file is never uploaded.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔍</text></svg>">
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="masthead">
+  <div class="wrap">
+    <p class="eyebrow">Static analysis for n8n</p>
+    <h1>Is this workflow safe to share?</h1>
+    <p class="standfirst">
+      Drop an n8n export below. It checks <strong>17 rules</strong> — leaked API keys,
+      silent failures, and what the thing costs to run — then explains each one in
+      plain English with the fix as clicks in n8n.
+    </p>
+    <p class="privacy-flag">
+      <span class="lock" aria-hidden="true">●</span>
+      Your workflow never leaves this page. <a href="#privacy">Here's how to verify that yourself.</a>
+    </p>
+  </div>
+</header>
+
+<main id="main" class="wrap">
+
+  <!-- ---------- input ---------- -->
+  <section id="input-panel" aria-labelledby="drop-heading">
+    <h2 id="drop-heading" class="sr-only">Choose a workflow</h2>
+
+    <div id="dropzone" class="dropzone" tabindex="0" role="button"
+         aria-describedby="drop-hint">
+      <svg class="drop-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M12 16V4m0 0L8 8m4-4 4 4" fill="none" stroke="currentColor"
+              stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" fill="none"
+              stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+      <p class="drop-title">Drop your workflow <code>.json</code> here</p>
+      <p id="drop-hint" class="drop-hint">or click to choose a file</p>
+      <input type="file" id="file-input" accept=".json,application/json" hidden>
+    </div>
+
+    <div class="alt-inputs">
+      <button type="button" id="try-sample" class="btn btn-primary">
+        Try it with a sample workflow
+      </button>
+      <span class="alt-or">or</span>
+      <button type="button" id="paste-toggle" class="btn btn-quiet">Paste JSON instead</button>
+    </div>
+
+    <div id="paste-panel" class="paste-panel" hidden>
+      <label for="paste-area" class="sr-only">Paste workflow JSON</label>
+      <textarea id="paste-area" rows="8" spellcheck="false"
+                placeholder='{ "nodes": [ ... ], "connections": { ... } }'></textarea>
+      <button type="button" id="paste-run" class="btn btn-primary">Check this JSON</button>
+    </div>
+
+    <p class="how-to">
+      <strong>Getting the file:</strong> open your workflow in n8n → three-dots menu,
+      top right → <em>Download</em>.
+    </p>
+  </section>
+
+  <!-- ---------- loading ---------- -->
+  <section id="loading-panel" class="loading" hidden aria-live="polite">
+    <div class="spinner" aria-hidden="true"></div>
+    <p id="loading-text">Starting the checker…</p>
+    <p class="loading-note">
+      First run downloads the Python engine (about 7&nbsp;MB). It is cached after that.
+      Your workflow file is not part of this — it stays on your machine.
+    </p>
+  </section>
+
+  <!-- ---------- results ---------- -->
+  <section id="results-panel" hidden aria-live="polite">
+
+    <div id="verdict" class="verdict"></div>
+
+    <div class="results-bar">
+      <div class="counts" id="counts"></div>
+      <div class="controls">
+        <div class="seg" role="group" aria-label="Report style">
+          <button type="button" class="seg-btn is-on" id="view-plain" aria-pressed="true">Plain English</button>
+          <button type="button" class="seg-btn" id="view-tech" aria-pressed="false">Technical</button>
+        </div>
+        <button type="button" class="btn btn-quiet" id="copy-report">Copy report</button>
+        <button type="button" class="btn btn-quiet" id="download-report">Download</button>
+        <button type="button" class="btn btn-quiet" id="check-another">Check another</button>
+      </div>
+    </div>
+
+    <div id="findings"></div>
+    <pre id="tech-output" class="tech-output" hidden></pre>
+
+    <p id="info-toggle-wrap" class="info-toggle-wrap" hidden>
+      <button type="button" id="info-toggle" class="link-btn"></button>
+    </p>
+  </section>
+
+  <!-- ---------- privacy ---------- -->
+  <section id="privacy" class="prose" aria-labelledby="privacy-heading">
+    <h2 id="privacy-heading">Your file is never uploaded</h2>
+    <p>
+      This is a tool for finding leaked credentials. Asking you to upload the file
+      containing those credentials would be a strange way to build it, so it does
+      not. The checker is the real Python linter, compiled to WebAssembly and run
+      inside this tab.
+    </p>
+    <p><strong>Don't take our word for it:</strong></p>
+    <ol>
+      <li>Press <kbd>F12</kbd> and open the <em>Network</em> tab.</li>
+      <li>Wait for this page and the engine to finish loading, then clear the list.</li>
+      <li>Drop a workflow in. <strong>No request fires.</strong> Nothing is sent anywhere.</li>
+    </ol>
+    <p class="fineprint">
+      Full disclosure on what <em>does</em> load: opening the page fetches this page's
+      own files and the Pyodide runtime from the jsDelivr CDN, the same way any site
+      loads a script. That happens before you choose a file and never includes your
+      workflow. There is no server, no database, no analytics, and no log of what you
+      checked — which also means nobody, including us, can see your results.
+    </p>
+  </section>
+
+  <!-- ---------- what it checks ---------- -->
+  <section class="prose" aria-labelledby="rules-heading">
+    <h2 id="rules-heading">What it checks</h2>
+    <div id="rule-list" class="rule-list"></div>
+    <p class="fineprint">
+      Every rule is measured against 59 real published workflows before it ships. A
+      linter that cries wolf gets switched off, so a warning firing on more than
+      two-thirds of that corpus is treated as an opinion rather than a defect and
+      gets downgraded — one of these rules failed that bar and was demoted.
+      <a href="https://github.com/Redsf/n8n-workflow-linter#calibration">See the calibration data.</a>
+    </p>
+  </section>
+
+</main>
+
+<footer class="footer">
+  <div class="wrap">
+    <p>
+      <strong>n8n Workflow Linter</strong> — also a CLI, a GitHub Action, and a
+      pre-commit hook.
+      <a href="https://github.com/Redsf/n8n-workflow-linter">Source on GitHub</a>
+    </p>
+    <p class="fineprint">
+      Built by <a href="https://github.com/Redsf">Redowan Ahmed Farhan</a> ·
+      <a href="https://n8n.io/creators/redowanfarhan/">n8n creator profile</a> ·
+      MIT licensed · <span id="version-tag"></span>
+    </p>
+  </div>
+</footer>
+
+<script src="./app.js" type="module"></script>
+</body>
+</html>
