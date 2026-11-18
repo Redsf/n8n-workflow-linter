@@ -14,15 +14,8 @@ your private instance, real customer records pinned as test data, or an HTTP
 call with no retry — and nothing tells you until it's in the repo or failing at
 2am. This is the missing check.
 
-```text
-$ n8n-lint workflows/
-workflows/cold_email.json
-  :12   error   openAiApi credential uses a real instance ID (8gccIj…aoEr); replace with REPLACE_WITH_CREDENTIAL_ID (Personalize Email)
-  :40   warning HTTP Request has retryOnFail disabled — a transient error will fail the run (Send)
-        warning workflow ships pinned data for: Get Leads — remove it before publishing; it commonly contains real records
+![n8n-lint run on three workflow exports: 3 errors and 11 warnings including a leaked OpenAI key and real credential IDs, exit code 1; then a clean workflow passing with exit code 0](demo/demo.gif)
 
-Checked 1 workflow file(s): 1 error(s), 2 warning(s), 0 info.
-```
 
 **Zero runtime dependencies.** The whole linter runs on the Python standard
 library, so it works in any CI job that has `python` and nothing else.

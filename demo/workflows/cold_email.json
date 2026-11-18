@@ -1,0 +1,44 @@
+{
+  "name": "Leaky Example",
+  "nodes": [
+    {
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [0, 0],
+      "parameters": { "path": "hook", "httpMethod": "POST" }
+    },
+    {
+      "name": "Call OpenAI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [200, 0],
+      "parameters": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "headerParametersJson": "{\"Authorization\": \"Bearer sk-proj-AbCdEf0123456789GhIjKlMnOpQrStUvWx\"}"
+      },
+      "credentials": {
+        "openAiApi": { "id": "8gccIjcuf3gvaoEr", "name": "OpenAi account" }
+      }
+    },
+    {
+      "name": "Append to Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [400, 0],
+      "parameters": {
+        "documentId": { "value": "1zcuAB3I_PDgwjmAvXOEoKM2lZFGizrJZU1IMIs6LpXI" }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": { "id": "XHvC7jIRR8A2TlUl", "name": "Sheets" }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": { "main": [[{ "node": "Call OpenAI", "type": "main", "index": 0 }]] },
+    "Call OpenAI": { "main": [[{ "node": "Append to Sheet", "type": "main", "index": 0 }]] }
+  },
+  "pinData": {
+    "Webhook": [{ "json": { "email": "real.customer@acme.com", "order_id": 55123 } }]
+  }
+}
